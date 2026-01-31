@@ -27,6 +27,8 @@ async function run() {
     const database = client.db("CourierDB");
     const usersCollection = database.collection("users");
     const categoriesCollection = database.collection("categories");
+    const courierTypesCollection = database.collection("courierTypes");
+
 
     // POST endpoint to save user data (with role)
     app.post("/users", async (req, res) => {
@@ -126,6 +128,21 @@ async function run() {
       const category = await categoriesCollection.findOne(query);
       res.send(category);
     });
+  
+    // Update a category by ID
+    app.put("/categories/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedCategory = req.body;
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          name: updatedCategory.name,
+          status: updatedCategory.status,
+        },
+      };
+      const result = await categoriesCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    });
 
     // Delete a category by ID
     app.delete("/categories/:id", async (req, res) => {
@@ -135,21 +152,47 @@ async function run() {
       res.send(result);
     });
 
-    // Update a category by ID
-    app.put("/categories/:id", async (req, res) => {
-      const id = req.params.id;
-      const updatedCategory = req.body;
-      const filter = { _id: new ObjectId(id) };
-      const updateDoc = {
-        $set: {
-          name: updatedCategory.name,
-          image: updatedCategory.image,
-          status: updatedCategory.status,
-        },
-      };
-      const result = await categoriesCollection.updateOne(filter, updateDoc);
-      res.send(result);
-    });
+
+    // Add courier type
+app.post("/courierTypes", async (req, res) => {
+  const courierType = req.body;
+  const result = await courierTypesCollection.insertOne(courierType);
+  res.send(result);
+});
+
+// Get all courier types
+app.get("/courierTypes", async (req, res) => {
+  const result = await courierTypesCollection.find().toArray();
+  res.send(result);
+});
+
+// Get single courier type
+app.get("/courierTypes/:id", async (req, res) => {
+  const result = await courierTypesCollection.findOne({
+    _id: new ObjectId(req.params.id),
+  });
+  res.send(result);
+});
+
+// Update courier type
+app.put("/courierTypes/:id", async (req, res) => {
+  const { name, status } = req.body;
+
+  const result = await courierTypesCollection.updateOne(
+    { _id: new ObjectId(req.params.id) },
+    { $set: { name, status } }
+  );
+
+  res.send(result);
+});
+
+// Delete courier type
+app.delete("/courierTypes/:id", async (req, res) => {
+  const result = await courierTypesCollection.deleteOne({
+    _id: new ObjectId(req.params.id),
+  });
+  res.send(result);
+});
 
 
     // Send a ping to confirm a successful connection
