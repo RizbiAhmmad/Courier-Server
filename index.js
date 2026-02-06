@@ -28,7 +28,7 @@ async function run() {
     const usersCollection = database.collection("users");
     const categoriesCollection = database.collection("categories");
     const courierTypesCollection = database.collection("courierTypes");
-
+    const countriesCollection = database.collection("countries");
 
     // POST endpoint to save user data (with role)
     app.post("/users", async (req, res) => {
@@ -108,7 +108,7 @@ async function run() {
       res.send(result);
     });
 
-     // Add a new category
+    // Add a new category
     app.post("/categories", async (req, res) => {
       const category = req.body;
       const result = await categoriesCollection.insertOne(category);
@@ -128,7 +128,7 @@ async function run() {
       const category = await categoriesCollection.findOne(query);
       res.send(category);
     });
-  
+
     // Update a category by ID
     app.put("/categories/:id", async (req, res) => {
       const id = req.params.id;
@@ -152,48 +152,89 @@ async function run() {
       res.send(result);
     });
 
-
     // Add courier type
-app.post("/courierTypes", async (req, res) => {
-  const courierType = req.body;
-  const result = await courierTypesCollection.insertOne(courierType);
-  res.send(result);
-});
+    app.post("/courierTypes", async (req, res) => {
+      const courierType = req.body;
+      const result = await courierTypesCollection.insertOne(courierType);
+      res.send(result);
+    });
 
-// Get all courier types
-app.get("/courierTypes", async (req, res) => {
-  const result = await courierTypesCollection.find().toArray();
-  res.send(result);
-});
+    // Get all courier types
+    app.get("/courierTypes", async (req, res) => {
+      const result = await courierTypesCollection.find().toArray();
+      res.send(result);
+    });
 
-// Get single courier type
-app.get("/courierTypes/:id", async (req, res) => {
-  const result = await courierTypesCollection.findOne({
-    _id: new ObjectId(req.params.id),
-  });
-  res.send(result);
-});
+    // Get single courier type
+    app.get("/courierTypes/:id", async (req, res) => {
+      const result = await courierTypesCollection.findOne({
+        _id: new ObjectId(req.params.id),
+      });
+      res.send(result);
+    });
 
-// Update courier type
-app.put("/courierTypes/:id", async (req, res) => {
-  const { name, status } = req.body;
+    // Update courier type
+    app.put("/courierTypes/:id", async (req, res) => {
+      const { name, status } = req.body;
 
-  const result = await courierTypesCollection.updateOne(
-    { _id: new ObjectId(req.params.id) },
-    { $set: { name, status } }
-  );
+      const result = await courierTypesCollection.updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { name, status } },
+      );
 
-  res.send(result);
-});
+      res.send(result);
+    });
 
-// Delete courier type
-app.delete("/courierTypes/:id", async (req, res) => {
-  const result = await courierTypesCollection.deleteOne({
-    _id: new ObjectId(req.params.id),
-  });
-  res.send(result);
-});
+    // Delete courier type
+    app.delete("/courierTypes/:id", async (req, res) => {
+      const result = await courierTypesCollection.deleteOne({
+        _id: new ObjectId(req.params.id),
+      });
+      res.send(result);
+    });
 
+    // Add new country
+    app.post("/countries", async (req, res) => {
+      const country = req.body;
+      const result = await countriesCollection.insertOne(country);
+      res.send(result);
+    });
+
+    // Get all countries
+    app.get("/countries", async (req, res) => {
+      const result = await countriesCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Get single country by ID
+    app.get("/countries/:id", async (req, res) => {
+      const id = req.params.id;
+      const country = await countriesCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      res.send(country);
+    });
+
+    // Update country by ID
+    app.put("/countries/:id", async (req, res) => {
+      const id = req.params.id;
+      const { name, status } = req.body;
+      const updateDoc = { $set: { name, status } };
+      const result = await countriesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updateDoc,
+      );
+      res.send(result);
+    });
+
+    // Delete country by ID
+    app.delete("/countries/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await countriesCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
