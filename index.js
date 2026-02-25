@@ -29,7 +29,8 @@ async function run() {
     const categoriesCollection = database.collection("categories");
     const courierTypesCollection = database.collection("courierTypes");
     const countriesCollection = database.collection("countries");
-
+    const courierRatesCollection = database.collection("courierRates");
+    
     // POST endpoint to save user data (with role)
     app.post("/users", async (req, res) => {
       const user = req.body;
@@ -231,6 +232,74 @@ async function run() {
     app.delete("/countries/:id", async (req, res) => {
       const id = req.params.id;
       const result = await countriesCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
+
+    // POST: Add new courier rates
+    app.post("/courierRates", async (req, res) => {
+      const { categoryId, countryId, variations, status } = req.body;
+
+      if (!categoryId || !countryId || !variations || !variations.length) {
+        return res.status(400).send({ message: "Incomplete data" });
+      }
+
+      const newCourierRate = {
+        categoryId,
+        countryId,
+        variations,
+        status: status || "active",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const result = await courierRatesCollection.insertOne(newCourierRate);
+      res.send(result);
+    });
+
+    // GET: Get all courier rates
+    app.get("/courierRates", async (req, res) => {
+      const result = await courierRatesCollection.find().toArray();
+      res.send(result);
+    });
+
+    // GET: Get single courier rate by ID
+    app.get("/courierRates/:id", async (req, res) => {
+      const id = req.params.id;
+      const courierRate = await courierRatesCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      res.send(courierRate);
+    });
+
+    // PUT: Update courier rate by ID
+    app.put("/courierRates/:id", async (req, res) => {
+      const id = req.params.id;
+      const { categoryId, countryId, variations, status } = req.body;
+
+      const updateDoc = {
+        $set: {
+          categoryId,
+          countryId,
+          variations,
+          status,
+          updatedAt: new Date(),
+        },
+      };
+
+      const result = await courierRatesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updateDoc,
+      );
+
+      res.send(result);
+    });
+
+    // DELETE: Remove courier rate by ID
+    app.delete("/courierRates/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await courierRatesCollection.deleteOne({
         _id: new ObjectId(id),
       });
       res.send(result);
