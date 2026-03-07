@@ -35,7 +35,8 @@ async function run() {
     const courierTypesCollection = database.collection("courierTypes");
     const countriesCollection = database.collection("countries");
     const courierRatesCollection = database.collection("courierRates");
-const shipmentsCollection = database.collection("shipments");
+    const shipmentsCollection = database.collection("shipments");
+    const blogsCollection = database.collection("blogs");
 
     // POST endpoint to save user data (with role)
     app.post("/users", async (req, res) => {
@@ -124,13 +125,12 @@ const shipmentsCollection = database.collection("shipments");
 
     // Get all categories
     app.get("/categories", async (req, res) => {
+      const { status } = req.query;
 
-       const { status } = req.query;
-
-  const query = {};
-  if (status) {
-    query.status = status;
-  }
+      const query = {};
+      if (status) {
+        query.status = status;
+      }
       const result = await categoriesCollection.find(query).toArray();
       res.send(result);
     });
@@ -329,157 +329,213 @@ const shipmentsCollection = database.collection("shipments");
       res.send(result);
     });
 
-   app.post("/shipments", async (req, res) => {
-  try {
-    const shipment = req.body;
-    const trackingId = generateTrackingId();
+    app.post("/shipments", async (req, res) => {
+      try {
+        const shipment = req.body;
+        const trackingId = generateTrackingId();
 
-    const newShipment = {
-      ...shipment,
-      trackingId,
-      status: "pending",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const result = await shipmentsCollection.insertOne(newShipment);
-
-    // ✅ Send the full shipment object, not just IDs
-    res.send(newShipment);
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "Failed to create shipment" });
-  }
-});
-
-app.get("/shipments", async (req, res) => {
-  try {
-    const { status, trackingId } = req.query;
-
-    const query = {};
-
-    if (status) query.status = status;
-    if (trackingId) query.trackingId = trackingId;
-
-    const result = await shipmentsCollection
-      .find(query)
-      .sort({ createdAt: -1 })
-      .toArray();
-
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to fetch shipments" });
-  }
-});
-
-app.get("/shipments/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    const shipment = await shipmentsCollection.findOne({
-      _id: new ObjectId(id),
-    });
-
-    if (!shipment) {
-      return res.status(404).send({ message: "Shipment not found" });
-    }
-
-    res.send(shipment);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to fetch shipment" });
-  }
-});
-
-app.get("/track/:trackingId", async (req, res) => {
-  try {
-    const trackingId = req.params.trackingId;
-
-    const shipment = await shipmentsCollection.findOne({ trackingId });
-
-    if (!shipment) {
-      return res.status(404).send({ message: "Tracking ID not found" });
-    }
-
-    res.send(shipment);
-  } catch (error) {
-    res.status(500).send({ message: "Tracking failed" });
-  }
-});
-
-app.put("/shipments/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const updatedShipment = req.body;
-
-    if (!ObjectId.isValid(id)) {
-      return res.status(400).send({ message: "Invalid shipment ID" });
-    }
-
-    const filter = { _id: new ObjectId(id) };
-
-    const updateDoc = {
-      $set: {
-        ...updatedShipment,
-        updatedAt: new Date(),
-      },
-    };
-
-    const result = await shipmentsCollection.updateOne(filter, updateDoc);
-
-    if (result.matchedCount === 0) {
-      return res.status(404).send({ message: "Shipment not found" });
-    }
-
-    res.send({
-      message: "Shipment updated successfully",
-      modifiedCount: result.modifiedCount,
-    });
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).send({ message: "Failed to update shipment" });
-  }
-});
-
-app.patch("/shipments/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const { status } = req.body;
-
-    if (!status) {
-      return res.status(400).send({ message: "Status is required" });
-    }
-
-    const result = await shipmentsCollection.updateOne(
-      { _id: new ObjectId(id) },
-      {
-        $set: {
-          status,
+        const newShipment = {
+          ...shipment,
+          trackingId,
+          status: "pending",
+          createdAt: new Date(),
           updatedAt: new Date(),
-        },
+        };
+
+        const result = await shipmentsCollection.insertOne(newShipment);
+
+        res.send(newShipment);
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to create shipment" });
       }
-    );
-
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to update shipment" });
-  }
-});
-
-app.delete("/shipments/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-
-    const result = await shipmentsCollection.deleteOne({
-      _id: new ObjectId(id),
     });
 
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to delete shipment" });
-  }
-});
+    app.get("/shipments", async (req, res) => {
+      try {
+        const { status, trackingId } = req.query;
+
+        const query = {};
+
+        if (status) query.status = status;
+        if (trackingId) query.trackingId = trackingId;
+
+        const result = await shipmentsCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch shipments" });
+      }
+    });
+
+    app.get("/shipments/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        const shipment = await shipmentsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!shipment) {
+          return res.status(404).send({ message: "Shipment not found" });
+        }
+
+        res.send(shipment);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch shipment" });
+      }
+    });
+
+    app.get("/track/:trackingId", async (req, res) => {
+      try {
+        const trackingId = req.params.trackingId;
+
+        const shipment = await shipmentsCollection.findOne({ trackingId });
+
+        if (!shipment) {
+          return res.status(404).send({ message: "Tracking ID not found" });
+        }
+
+        res.send(shipment);
+      } catch (error) {
+        res.status(500).send({ message: "Tracking failed" });
+      }
+    });
+
+    app.put("/shipments/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const updatedShipment = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid shipment ID" });
+        }
+
+        const filter = { _id: new ObjectId(id) };
+
+        const updateDoc = {
+          $set: {
+            ...updatedShipment,
+            updatedAt: new Date(),
+          },
+        };
+
+        const result = await shipmentsCollection.updateOne(filter, updateDoc);
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "Shipment not found" });
+        }
+
+        res.send({
+          message: "Shipment updated successfully",
+          modifiedCount: result.modifiedCount,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "Failed to update shipment" });
+      }
+    });
+
+    app.patch("/shipments/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { status } = req.body;
+
+        if (!status) {
+          return res.status(400).send({ message: "Status is required" });
+        }
+
+        const result = await shipmentsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              status,
+              updatedAt: new Date(),
+            },
+          },
+        );
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to update shipment" });
+      }
+    });
+
+    app.delete("/shipments/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        const result = await shipmentsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to delete shipment" });
+      }
+    });
+
+    // Add blog
+    app.post("/blogs", async (req, res) => {
+      const blog = req.body;
+
+      const result = await blogsCollection.insertOne(blog);
+
+      res.send(result);
+    });
+
+    // Get all blogs
+    app.get("/blogs", async (req, res) => {
+      const result = await blogsCollection.find().toArray();
+
+      res.send(result);
+    });
+
+    // Get single blog
+    app.get("/blogs/:id", async (req, res) => {
+      const id = req.params.id;
+
+      const result = await blogsCollection.findOne({
+        _id: new ObjectId(id),
+      });
+
+      res.send(result);
+    });
+
+    // Update blog
+    app.put("/blogs/:id", async (req, res) => {
+      const id = req.params.id;
+
+      const updated = req.body;
+
+      const result = await blogsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            title: updated.title,
+            tag: updated.tag,
+            status: updated.status,
+             image: updated.image || null,
+          },
+        },
+      );
+
+      res.send(result);
+    });
+
+    // Delete blog
+    app.delete("/blogs/:id", async (req, res) => {
+      const id = req.params.id;
+
+      const result = await blogsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
