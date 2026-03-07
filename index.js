@@ -37,6 +37,7 @@ async function run() {
     const courierRatesCollection = database.collection("courierRates");
     const shipmentsCollection = database.collection("shipments");
     const blogsCollection = database.collection("blogs");
+    const gtmCollection = database.collection("gtm");
 
     // POST endpoint to save user data (with role)
     app.post("/users", async (req, res) => {
@@ -535,6 +536,40 @@ async function run() {
       });
 
       res.send(result);
+    });
+
+    app.post("/gtm", async (req, res) => {
+      try {
+        const { gtmId, enableGtm } = req.body;
+
+        const filter = {};
+        const updateDoc = {
+          $set: {
+            gtmId,
+            enableGtm,
+          },
+        };
+        const options = { upsert: true };
+
+        const result = await gtmCollection.updateOne(
+          filter,
+          updateDoc,
+          options,
+        );
+
+        res.send({
+          success: true,
+          message: "GTM settings updated",
+          result,
+        });
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+      }
+    });
+
+    app.get("/gtm", async (req, res) => {
+      const gtm = await gtmCollection.findOne({});
+      res.send(gtm);
     });
 
     // Send a ping to confirm a successful connection
