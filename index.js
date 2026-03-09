@@ -38,6 +38,7 @@ async function run() {
     const shipmentsCollection = database.collection("shipments");
     const blogsCollection = database.collection("blogs");
     const gtmCollection = database.collection("gtm");
+    const noticeCollection = database.collection("notice");
 
     // POST endpoint to save user data (with role)
     app.post("/users", async (req, res) => {
@@ -570,6 +571,40 @@ async function run() {
     app.get("/gtm", async (req, res) => {
       const gtm = await gtmCollection.findOne({});
       res.send(gtm);
+    });
+    
+    app.post("/notice", async (req, res) => {
+      try {
+        const { title, description, buttonText, delay, isActive } = req.body;
+
+        const filter = {};
+        const updateDoc = {
+          $set: {
+            title,
+            description,
+            buttonText,
+            delay: Number(delay) || 3000,
+            isActive: Boolean(isActive),
+          },
+        };
+
+        const options = { upsert: true };
+
+        const result = await noticeCollection.updateOne(
+          filter,
+          updateDoc,
+          options,
+        );
+
+        res.send({ success: true, result });
+      } catch (error) {
+        res.status(500).send({ success: false, message: error.message });
+      }
+    });
+
+    app.get("/notice", async (req, res) => {
+      const notice = await noticeCollection.findOne({});
+      res.send(notice);
     });
 
     // Send a ping to confirm a successful connection
