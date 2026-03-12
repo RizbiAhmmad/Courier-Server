@@ -5,7 +5,17 @@ const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+    ],
+    credentials: true,
+    methods: ["GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 app.use(express.json());
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ppobgmi.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -39,6 +49,8 @@ async function run() {
     const blogsCollection = database.collection("blogs");
     const gtmCollection = database.collection("gtm");
     const noticeCollection = database.collection("notice");
+    const expenseCategoriesCollection = database.collection("expenseCategories");
+    const expensesCollection = database.collection("expenses");
 
     // POST endpoint to save user data (with role)
     app.post("/users", async (req, res) => {
@@ -416,11 +428,18 @@ async function run() {
           return res.status(400).send({ message: "Invalid shipment ID" });
         }
 
+        const totalShipping =
+          updatedShipment.packages?.reduce(
+            (sum, box) => sum + Number(box.shippingCost || 0),
+            0,
+          ) || 0;
+
         const filter = { _id: new ObjectId(id) };
 
         const updateDoc = {
           $set: {
             ...updatedShipment,
+            totalShipping,
             updatedAt: new Date(),
           },
         };
@@ -480,6 +499,38 @@ async function run() {
       }
     });
 
+ app.get("/sales-report", async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const query = {
+      status: "delivered",
+    };
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      // end date → next day
+      end.setDate(end.getDate() + 1);
+
+      query.createdAt = {
+        $gte: start,
+        $lt: end, // important
+      };
+    }
+
+    const shipments = await shipmentsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(shipments);
+  } catch (error) {
+    res.status(500).send({ message: "Failed to fetch sales report" });
+  }
+});
+
     // Add blog
     app.post("/blogs", async (req, res) => {
       const blog = req.body;
@@ -518,9 +569,10 @@ async function run() {
         {
           $set: {
             title: updated.title,
+            description: updated.description,
             tag: updated.tag,
             status: updated.status,
-             image: updated.image || null,
+            image: updated.image || null,
           },
         },
       );
@@ -572,7 +624,7 @@ async function run() {
       const gtm = await gtmCollection.findOne({});
       res.send(gtm);
     });
-    
+
     app.post("/notice", async (req, res) => {
       try {
         const { title, description, buttonText, delay, isActive } = req.body;
@@ -606,6 +658,225 @@ async function run() {
       const notice = await noticeCollection.findOne({});
       res.send(notice);
     });
+
+     // Add Expense Category
+    app.post("/expense-categories", async (req, res) => {
+      const expenseCategory = req.body;
+      const result =
+        await expenseCategoriesCollection.insertOne(expenseCategory);
+      res.send(result);
+    });
+
+    // Get Expense Categories
+    app.get("/expense-categories", async (req, res) => {
+      const result = await expenseCategoriesCollection.find().toArray();
+      res.send(result);
+    });
+
+    // Delete Expense Category
+    app.delete("/expense-categories/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await expenseCategoriesCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
+
+    // Update Expense Category
+    app.put("/expense-categories/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedData = req.body;
+
+      try {
+        const result = await expenseCategoriesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              name: updatedData.name,
+              status: updatedData.status,
+            },
+          },
+        );
+
+        if (result.modifiedCount > 0) {
+          res.send({
+            success: true,
+            message: "Expense category updated successfully",
+          });
+        } else {
+          res.send({
+            success: false,
+            message: "No changes made or category not found",
+          });
+        }
+      } catch (error) {
+        console.error("Error updating expense category:", error);
+        res.status(500).send({
+          success: false,
+          message: "Failed to update expense category",
+        });
+      }
+    });
+
+
+       // Add Expense
+    app.post("/expenses", async (req, res) => {
+      try {
+        const expense = {
+          ...req.body,
+          price: Number(req.body.price), // store as number
+          date: new Date(req.body.date), // store as Date
+        };
+
+        const result = await expensesCollection.insertOne(expense);
+        res.send(result);
+      } catch (error) {
+        console.error("Error adding expense:", error);
+        res.status(500).send({ message: "Failed to add expense" });
+      }
+    });
+
+    // Get All Expenses
+    app.get("/expenses", async (req, res) => {
+      try {
+        const result = await expensesCollection.find().toArray();
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching expenses:", error);
+        res.status(500).send({ message: "Failed to fetch expenses" });
+      }
+    });
+
+    // Update Expense - ensure proper data types
+    app.put("/expenses/:id", async (req, res) => {
+      const { id } = req.params;
+      try {
+        const updatedExpense = {
+          ...req.body,
+          price: Number(req.body.price), // convert to number
+          date: new Date(req.body.date), // convert to Date
+        };
+
+        const result = await expensesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: updatedExpense },
+        );
+
+        res.send(result);
+      } catch (error) {
+        console.error("Error updating expense:", error);
+        res.status(500).send({ message: "Failed to update expense" });
+      }
+    });
+
+    // Delete Expense
+    app.delete("/expenses/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const result = await expensesCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        res.send(result);
+      } catch (error) {
+        console.error("Error deleting expense:", error);
+        res.status(500).send({ message: "Failed to delete expense" });
+      }
+    });
+
+     app.get("/expenses/report", async (req, res) => {
+      try {
+        const { startDate, endDate } = req.query;
+
+        let filter = {};
+        if (startDate && endDate) {
+          filter.date = {
+            $gte: new Date(startDate),
+            $lte: new Date(endDate),
+          };
+        }
+
+        const expenses = await expensesCollection
+          .find(filter)
+          .sort({ date: -1 })
+          .toArray();
+        const now = new Date();
+
+        const total = expenses.reduce(
+          (sum, e) => sum + Number(e.price || 0),
+          0,
+        );
+
+        if (startDate && endDate) {
+          return res.send({
+            total,
+            allExpenses: expenses,
+          });
+        }
+
+        // Otherwise full analytics
+        const today = expenses
+          .filter((e) => new Date(e.date).toDateString() === now.toDateString())
+          .reduce((sum, e) => sum + Number(e.price || 0), 0);
+
+        const yesterdayDate = new Date(now);
+        yesterdayDate.setDate(now.getDate() - 1);
+        const yesterday = expenses
+          .filter(
+            (e) =>
+              new Date(e.date).toDateString() === yesterdayDate.toDateString(),
+          )
+          .reduce((sum, e) => sum + Number(e.price || 0), 0);
+
+        const weekStart = new Date(now);
+        weekStart.setDate(now.getDate() - 7);
+        const thisWeek = expenses
+          .filter((e) => new Date(e.date) >= weekStart)
+          .reduce((sum, e) => sum + Number(e.price || 0), 0);
+
+        const prevWeekStart = new Date(now);
+        prevWeekStart.setDate(now.getDate() - 14);
+        const prevWeekEnd = new Date(now);
+        prevWeekEnd.setDate(now.getDate() - 7);
+        const previousWeek = expenses
+          .filter(
+            (e) =>
+              new Date(e.date) >= prevWeekStart &&
+              new Date(e.date) < prevWeekEnd,
+          )
+          .reduce((sum, e) => sum + Number(e.price || 0), 0);
+
+        const thisMonth = expenses
+          .filter(
+            (e) =>
+              new Date(e.date).getMonth() === now.getMonth() &&
+              new Date(e.date).getFullYear() === now.getFullYear(),
+          )
+          .reduce((sum, e) => sum + Number(e.price || 0), 0);
+
+        const previousMonth = expenses
+          .filter(
+            (e) =>
+              new Date(e.date).getMonth() === now.getMonth() - 1 &&
+              new Date(e.date).getFullYear() === now.getFullYear(),
+          )
+          .reduce((sum, e) => sum + Number(e.price || 0), 0);
+
+        res.send({
+          total,
+          today,
+          yesterday,
+          thisWeek,
+          previousWeek,
+          thisMonth,
+          previousMonth,
+          allExpenses: expenses,
+        });
+      } catch (error) {
+        console.error("Error generating report:", error);
+        res.status(500).send({ message: "Failed to generate report" });
+      }
+    });
+
 
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
