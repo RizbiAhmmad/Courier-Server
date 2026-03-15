@@ -4,13 +4,37 @@ const app = express();
 const port = process.env.PORT || 5000;
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 require("dotenv").config();
+const axios = require("axios");
+
+const sendSMS = async (phone, message) => {
+  try {
+    const apiKey = process.env.BULKSMS_API_KEY;
+    const senderId = process.env.BULKSMS_SENDER_ID;
+
+    console.log("API KEY:", apiKey);
+    console.log("SENDER ID:", senderId);
+    console.log("SMS PHONE:", phone);
+    console.log("SMS MESSAGE:", message);
+
+    const url = `http://bulksmsbd.net/api/smsapi?api_key=${apiKey}&type=text&number=${phone}&senderid=${senderId}&message=${encodeURIComponent(
+      message,
+    )}`;
+
+    console.log("Attempting SMS via URL:", url);
+    const res = await axios.get(url);
+
+    console.log("BulkSMS API Response Data:", res.data);
+
+    return res.data;
+  } catch (err) {
+    console.error("SMS Network/System Error:", err.message);
+    return null;
+  }
+};
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-    ],
+    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -30,8 +54,9 @@ const client = new MongoClient(uri, {
 });
 
 const generateTrackingId = () => {
-  const random = Math.floor(100000 + Math.random() * 900000);
-  return `TRK${random}`;
+  const last4 = Date.now().toString().slice(-4);
+  const random2 = Math.floor(10 + Math.random() * 90); // 2 digit
+  return `TRK${last4}${random2}`;
 };
 
 async function run() {
@@ -49,7 +74,8 @@ async function run() {
     const blogsCollection = database.collection("blogs");
     const gtmCollection = database.collection("gtm");
     const noticeCollection = database.collection("notice");
-    const expenseCategoriesCollection = database.collection("expenseCategories");
+    const expenseCategoriesCollection =
+      database.collection("expenseCategories");
     const expensesCollection = database.collection("expenses");
 
     // POST endpoint to save user data (with role)
@@ -343,27 +369,67 @@ async function run() {
       res.send(result);
     });
 
+    // app.post("/shipments", async (req, res) => {
+    //   try {
+    //     const shipment = req.body;
+    //     const trackingId = generateTrackingId();
+
+    //     const newShipment = {
+    //       ...shipment,
+    //       trackingId,
+    //       status: "pending",
+    //       createdAt: new Date(),
+    //       updatedAt: new Date(),
+    //     };
+
+    //     const result = await shipmentsCollection.insertOne(newShipment);
+
+    //     res.send(newShipment);
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send({ message: "Failed to create shipment" });
+    //   }
+    // });
+
     app.post("/shipments", async (req, res) => {
-      try {
-        const shipment = req.body;
-        const trackingId = generateTrackingId();
+  try {
+    const shipment = req.body;
 
-        const newShipment = {
-          ...shipment,
-          trackingId,
-          status: "pending",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+    shipment.trackingId = generateTrackingId();
 
-        const result = await shipmentsCollection.insertOne(newShipment);
+    shipment.createdAt = new Date();
+    shipment.status = "pending";
 
-        res.send(newShipment);
-      } catch (error) {
-        console.error(error);
-        res.status(500).send({ message: "Failed to create shipment" });
-      }
+    const result = await shipmentsCollection.insertOne(shipment);
+
+    // SMS
+    try {
+      const customerName = shipment.name || "Customer";
+
+      const smsText = `Hello ${customerName},
+Your shipment confirmed.
+Tracking ID: ${shipment.trackingId}
+Track here:
+https://yourdomain.com/track/${shipment.trackingId}`;
+
+      let phone = shipment.phone?.toString().replace(/\D/g, "") || "";
+
+      if (phone.startsWith("0")) phone = "88" + phone;
+      else if (!phone.startsWith("88")) phone = "88" + phone;
+
+      await sendSMS(phone, smsText);
+    } catch (e) {}
+
+    res.send({
+      success: true,
+      trackingId: shipment.trackingId,   
+      insertedId: result.insertedId,
+      ...shipment
     });
+  } catch (err) {
+    res.status(500).send({ message: "Shipment create failed" });
+  }
+});
 
     app.get("/shipments", async (req, res) => {
       try {
@@ -460,28 +526,84 @@ async function run() {
       }
     });
 
-    app.patch("/shipments/:id", async (req, res) => {
-      try {
-        const id = req.params.id;
-        const { status } = req.body;
+    // app.patch("/shipments/:id", async (req, res) => {
+    //   try {
+    //     const id = req.params.id;
+    //     const { status } = req.body;
 
-        if (!status) {
-          return res.status(400).send({ message: "Status is required" });
+    //     if (!status) {
+    //       return res.status(400).send({ message: "Status is required" });
+    //     }
+
+    //     const result = await shipmentsCollection.updateOne(
+    //       { _id: new ObjectId(id) },
+    //       {
+    //         $set: {
+    //           status,
+    //           updatedAt: new Date(),
+    //         },
+    //       },
+    //     );
+
+    //     res.send(result);
+    //   } catch (error) {
+    //     res.status(500).send({ message: "Failed to update shipment" });
+    //   }
+    // });
+
+    app.patch("/shipments/:id/status", async (req, res) => {
+      try {
+        const { status } = req.body;
+        const id = req.params.id;
+
+        const shipment = await shipmentsCollection.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!shipment) {
+          return res.status(404).send({ message: "Shipment not found" });
         }
 
-        const result = await shipmentsCollection.updateOne(
+        await shipmentsCollection.updateOne(
           { _id: new ObjectId(id) },
-          {
-            $set: {
-              status,
-              updatedAt: new Date(),
-            },
-          },
+          { $set: { status } },
         );
 
-        res.send(result);
-      } catch (error) {
-        res.status(500).send({ message: "Failed to update shipment" });
+        //  SMS Text
+        let smsText = "";
+
+        if (status === "processing") {
+          smsText = `Hello ${shipment.name}, your parcel (${shipment.trackingId}) is now processing.`;
+        }
+
+        if (status === "shipped") {
+          smsText = `Good news! Your parcel (${shipment.trackingId}) has been shipped 🚚`;
+        }
+
+        if (status === "delivered") {
+          smsText = `Parcel Delivered Successfully ✅ Tracking ID: ${shipment.trackingId}`;
+        }
+
+        if (status === "cancelled") {
+          smsText = `Your parcel (${shipment.trackingId}) has been cancelled.`;
+        }
+
+        if (smsText) {
+          let phone = shipment.phone?.toString().replace(/\D/g, "") || "";
+
+          if (phone.startsWith("0")) phone = "88" + phone;
+          else if (!phone.startsWith("88")) phone = "88" + phone;
+
+          await sendSMS(phone, smsText);
+        }
+
+        res.send({
+          success: true,
+          message: "Shipment status updated & SMS sent",
+        });
+      } catch (err) {
+        console.log(err);
+        res.status(500).send({ message: "Server error" });
       }
     });
 
@@ -499,37 +621,37 @@ async function run() {
       }
     });
 
- app.get("/sales-report", async (req, res) => {
-  try {
-    const { startDate, endDate } = req.query;
+    app.get("/sales-report", async (req, res) => {
+      try {
+        const { startDate, endDate } = req.query;
 
-    const query = {
-      status: "delivered",
-    };
+        const query = {
+          status: "delivered",
+        };
 
-    if (startDate && endDate) {
-      const start = new Date(startDate);
-      const end = new Date(endDate);
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
 
-      // end date → next day
-      end.setDate(end.getDate() + 1);
+          // end date → next day
+          end.setDate(end.getDate() + 1);
 
-      query.createdAt = {
-        $gte: start,
-        $lt: end, // important
-      };
-    }
+          query.createdAt = {
+            $gte: start,
+            $lt: end, // important
+          };
+        }
 
-    const shipments = await shipmentsCollection
-      .find(query)
-      .sort({ createdAt: -1 })
-      .toArray();
+        const shipments = await shipmentsCollection
+          .find(query)
+          .sort({ createdAt: -1 })
+          .toArray();
 
-    res.send(shipments);
-  } catch (error) {
-    res.status(500).send({ message: "Failed to fetch sales report" });
-  }
-});
+        res.send(shipments);
+      } catch (error) {
+        res.status(500).send({ message: "Failed to fetch sales report" });
+      }
+    });
 
     // Add blog
     app.post("/blogs", async (req, res) => {
@@ -659,7 +781,7 @@ async function run() {
       res.send(notice);
     });
 
-     // Add Expense Category
+    // Add Expense Category
     app.post("/expense-categories", async (req, res) => {
       const expenseCategory = req.body;
       const result =
@@ -718,8 +840,7 @@ async function run() {
       }
     });
 
-
-       // Add Expense
+    // Add Expense
     app.post("/expenses", async (req, res) => {
       try {
         const expense = {
@@ -783,7 +904,7 @@ async function run() {
       }
     });
 
-     app.get("/expenses/report", async (req, res) => {
+    app.get("/expenses/report", async (req, res) => {
       try {
         const { startDate, endDate } = req.query;
 
@@ -876,7 +997,6 @@ async function run() {
         res.status(500).send({ message: "Failed to generate report" });
       }
     });
-
 
     // Send a ping to confirm a successful connection
     // await client.db("admin").command({ ping: 1 });
