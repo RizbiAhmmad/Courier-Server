@@ -392,53 +392,55 @@ async function run() {
     // });
 
     app.post("/shipments", async (req, res) => {
-  try {
-    const shipment = req.body;
+      try {
+        const shipment = req.body;
 
-    shipment.trackingId = generateTrackingId();
+        shipment.trackingId = generateTrackingId();
 
-    shipment.createdAt = new Date();
-    shipment.status = "pending";
+        shipment.createdAt = new Date();
+        shipment.status = "pending";
 
-    const result = await shipmentsCollection.insertOne(shipment);
+        const result = await shipmentsCollection.insertOne(shipment);
 
-    // SMS
-    try {
-      const customerName = shipment.name || "Customer";
+        // SMS
+        try {
+          const customerName = shipment.name || "Customer";
 
-      const smsText = `Hello ${customerName},
+          const smsText = `Hello ${customerName},
 Your shipment confirmed.
 Tracking ID: ${shipment.trackingId}
 Track here:
 https://yourdomain.com/track/${shipment.trackingId}`;
 
-      let phone = shipment.phone?.toString().replace(/\D/g, "") || "";
+          let phone = shipment.phone?.toString().replace(/\D/g, "") || "";
 
-      if (phone.startsWith("0")) phone = "88" + phone;
-      else if (!phone.startsWith("88")) phone = "88" + phone;
+          if (phone.startsWith("0")) phone = "88" + phone;
+          else if (!phone.startsWith("88")) phone = "88" + phone;
 
-      await sendSMS(phone, smsText);
-    } catch (e) {}
+          await sendSMS(phone, smsText);
+        } catch (e) {}
 
-    res.send({
-      success: true,
-      trackingId: shipment.trackingId,   
-      insertedId: result.insertedId,
-      ...shipment
+        res.send({
+          success: true,
+          trackingId: shipment.trackingId,
+          insertedId: result.insertedId,
+          ...shipment,
+        });
+      } catch (err) {
+        res.status(500).send({ message: "Shipment create failed" });
+      }
     });
-  } catch (err) {
-    res.status(500).send({ message: "Shipment create failed" });
-  }
-});
 
     app.get("/shipments", async (req, res) => {
       try {
-        const { status, trackingId } = req.query;
+        const { status, trackingId, email } = req.query;
 
         const query = {};
 
         if (status) query.status = status;
         if (trackingId) query.trackingId = trackingId;
+
+        if (email) query.email = email;
 
         const result = await shipmentsCollection
           .find(query)
