@@ -77,6 +77,7 @@ async function run() {
     const expenseCategoriesCollection =
       database.collection("expenseCategories");
     const expensesCollection = database.collection("expenses");
+    const reviewsCollection = database.collection("reviews");
 
     // POST endpoint to save user data (with role)
     app.post("/users", async (req, res) => {
@@ -368,28 +369,6 @@ async function run() {
       });
       res.send(result);
     });
-
-    // app.post("/shipments", async (req, res) => {
-    //   try {
-    //     const shipment = req.body;
-    //     const trackingId = generateTrackingId();
-
-    //     const newShipment = {
-    //       ...shipment,
-    //       trackingId,
-    //       status: "pending",
-    //       createdAt: new Date(),
-    //       updatedAt: new Date(),
-    //     };
-
-    //     const result = await shipmentsCollection.insertOne(newShipment);
-
-    //     res.send(newShipment);
-    //   } catch (error) {
-    //     console.error(error);
-    //     res.status(500).send({ message: "Failed to create shipment" });
-    //   }
-    // });
 
     app.post("/shipments", async (req, res) => {
       try {
@@ -840,6 +819,56 @@ https://yourdomain.com/track/${shipment.trackingId}`;
           message: "Failed to update expense category",
         });
       }
+    });
+
+    // --- Reviews API ---
+    app.post("/reviews", async (req, res) => {
+      const review = req.body;
+      const result = await reviewsCollection.insertOne(review);
+      res.send(result);
+    });
+
+    app.get("/reviews", async (req, res) => {
+      const { status } = req.query;
+      const query = status ? { status } : {};
+      const result = await reviewsCollection.find(query).sort({ createdAt: -1 }).toArray();
+      res.send(result);
+    });
+
+    app.delete("/reviews/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await reviewsCollection.deleteOne(query);
+      res.send(result);
+    });
+
+    app.patch("/reviews/:id", async (req, res) => {
+      const id = req.params.id;
+      const { status } = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: { status },
+      };
+      const result = await reviewsCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    app.put("/reviews/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedReview = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          name: updatedReview.name,
+          image: updatedReview.image,
+          rating: updatedReview.rating,
+          comment: updatedReview.comment,
+          status: updatedReview.status,
+          updatedAt: new Date(),
+        },
+      };
+      const result = await reviewsCollection.updateOne(query, updateDoc);
+      res.send(result);
     });
 
     // Add Expense
